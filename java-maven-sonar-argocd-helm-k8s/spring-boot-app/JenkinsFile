@@ -7,7 +7,7 @@ pipeline {
   }
 
   stages {
-    stage('Setup Docker CLI and Git') {
+    stage('Setup Tools') {
       steps {
         sh '''
           apt-get update && apt-get install -y docker.io git
@@ -21,25 +21,19 @@ pipeline {
       steps {
         checkout scm
         sh '''
-          echo "=== DEBUG: Checkout Info ==="
-          echo "WORKSPACE: ${WORKSPACE}"
+          echo "=== Checkout Complete ==="
           pwd
           ls -la
-          echo "Current branch:"
-          git branch --show-current || echo "Could not get branch"
-          echo "Git status:"
-          git status
-          echo "=== END DEBUG ==="
+          ls -la .git
         '''
       }
     }
 
     stage('Build and Test') {
       steps {
-        sh '''
-          cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
-          mvn clean package
-        '''
+        dir('java-maven-sonar-argocd-helm-k8s/spring-boot-app') {
+          sh 'mvn clean package'
+        }
       }
     }
 
@@ -48,15 +42,16 @@ pipeline {
         SONAR_URL = "http://54.205.168.78:9000"
       }
       steps {
-        withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
-          sh '''
-            cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
-            mvn org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922:sonar \
-              -Dsonar.token=$SONAR_AUTH_TOKEN \
-              -Dsonar.host.url=$SONAR_URL \
-              -Dsonar.projectKey=UltimateCICD \
-              -Dsonar.projectName=UltimateCICD
-          '''
+        dir('java-maven-sonar-argocd-helm-k8s/spring-boot-app') {
+          withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
+            sh '''
+              mvn org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922:sonar \
+                -Dsonar.token=$SONAR_AUTH_TOKEN \
+                -Dsonar.host.url=$SONAR_URL \
+                -Dsonar.projectKey=UltimateCICD \
+                -Dsonar.projectName=UltimateCICD
+            '''
+          }
         }
       }
     }
@@ -66,11 +61,13 @@ pipeline {
         DOCKER_IMAGE = "aaront93/ultimate-cicd:${BUILD_NUMBER}"
       }
       steps {
-        script {
-          sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && docker build -t ${DOCKER_IMAGE} .'
-          def dockerImage = docker.image("${DOCKER_IMAGE}")
-          docker.withRegistry('https://index.docker.io/v1/', "docker-cred") {
-            dockerImage.push()
+        dir('java-maven-sonar-argocd-helm-k8s/spring-boot-app') {
+          script {
+            sh 'docker build -t ${DOCKER_IMAGE} .'
+            def dockerImage = docker.image("${DOCKER_IMAGE}")
+            docker.withRegistry('https://index.docker.io/v1/', "docker-cred") {
+              dockerImage.push()
+            }
           }
         }
       }
@@ -83,56 +80,38 @@ pipeline {
       }
       steps {
         withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
-          sh '''
-            echo "=== DEBUG: Before Git Operations ==="
-            echo "Current directory:"
-            pwd
-            echo "WORKSPACE variable: ${WORKSPACE}"
-            echo "Listing current directory:"
-            ls -la
-            echo "=== END DEBUG ==="
+          sh '''#!/bin/bash
+            set -e
             
-            # Navigate to workspace root
-            cd ${WORKSPACE}
-            
-            echo "=== DEBUG: After cd to WORKSPACE ==="
+            echo "=== Current Location ==="
             pwd
             ls -la
-            echo "Checking for .git directory:"
-            ls -la .git || echo ".git not found in current directory"
-            echo "=== END DEBUG ==="
             
-            # Configure git safe directory
-            git config --global --add safe.directory ${WORKSPACE}
+            # Mark directory as safe for git (running as root in container)
+            git config --global --add safe.directory "$(pwd)"
             
             # Configure git user
             git config user.email "aaronthastal@gmail.com"
             git config user.name "Aaron White"
             
-            echo "=== DEBUG: Git Config ==="
-            git config --list
-            echo "=== END DEBUG ==="
-            
-            # Check current state
-            echo "=== DEBUG: Git Status Before Changes ==="
+            # Verify git is working
+            echo "=== Git Status ==="
             git status
             git remote -v
-            echo "=== END DEBUG ==="
             
-            # Update deployment file
-            echo "=== Updating deployment file ==="
+            # Show deployment file before change
+            echo "=== Deployment File BEFORE ==="
             cat java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
+            
+            # Update the image tag
             sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
-            echo "=== After sed ==="
+            
+            # Show deployment file after change
+            echo "=== Deployment File AFTER ==="
             cat java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
             
-            # Git operations
+            # Commit and push
             git add java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
-            
-            echo "=== DEBUG: Git Status After Add ==="
-            git status
-            echo "=== END DEBUG ==="
-            
             git commit -m "Update deployment image to version ${BUILD_NUMBER}"
             git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
           '''
