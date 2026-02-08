@@ -28,23 +28,23 @@ pipeline {
       }
     }
 
-stage('Static Code Analysis') {
-  environment {
-    SONAR_URL = "http://54.205.168.78:9000"
-  }
-  steps {
-    withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
-      sh '''
-        cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
-        mvn org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922:sonar \
-          -Dsonar.token=$SONAR_AUTH_TOKEN \
-          -Dsonar.host.url=$SONAR_URL \
-          -Dsonar.projectKey=UltimateCICD \
-          -Dsonar.projectName=UltimateCICD
-      '''
+    stage('Static Code Analysis') {
+      environment {
+        SONAR_URL = "http://54.205.168.78:9000"
+      }
+      steps {
+        withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
+          sh '''
+            cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
+            mvn org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922:sonar \
+              -Dsonar.token=$SONAR_AUTH_TOKEN \
+              -Dsonar.host.url=$SONAR_URL \
+              -Dsonar.projectKey=UltimateCICD \
+              -Dsonar.projectName=UltimateCICD
+          '''
+        }
+      }
     }
-  }
-}
 
     stage('Build and Push Docker Image') {
       environment {
@@ -61,26 +61,25 @@ stage('Static Code Analysis') {
       }
     }
 
-   stage('Update Deployment File') {
-  environment {
-    GIT_REPO_NAME = "ultimate-cicd-pipeline"
-    GIT_USER_NAME = "AaronWhiteTX"
-  }
-  steps {
-    withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
-      sh '''
-        cd /var/lib/jenkins/workspace/UltimatePipeline
-        git config user.email "aaronthastal@gmail.com"
-        git config user.name "Aaron White"
-        BUILD_NUMBER=${BUILD_NUMBER}
-        sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
-        git add java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
-        git commit -m "Update deployment image to version ${BUILD_NUMBER}"
-        git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
-      '''
+    stage('Update Deployment File') {
+      environment {
+        GIT_REPO_NAME = "ultimate-cicd-pipeline"
+        GIT_USER_NAME = "AaronWhiteTX"
+      }
+      steps {
+        withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+          sh '''
+            git config user.email "aaronthastal@gmail.com"
+            git config user.name "Aaron White"
+            sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
+            git add java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
+            git commit -m "Update deployment image to version ${BUILD_NUMBER}"
+            git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+          '''
+        }
+      }
     }
   }
-}
 
   post {
     success {
