@@ -126,22 +126,9 @@ Author
 Aaron White
 
 GitHub: @AaronWhiteTX
-LinkedIn: [Your LinkedIn]
+LinkedIn: https://www.linkedin.com/in/aaron-white-5a6a2686/
 License
 This project is for educational and portfolio purposes.
 
-text
-
----
-
-## To Use This:
-
-1. Create an `images/` folder in your repo
-2. Add your screenshots renamed as:
-   - `jenkins-pipeline.png`
-   - `sonarqube.png`
-   - `argocd.png`
-   - `dockerhub.png`
-3. Save this as `README.md` in your repo root
 
 Want me to adjust anything?
