@@ -7,10 +7,12 @@ pipeline {
   }
 
   stages {
-    stage('Setup Docker CLI') {
+    stage('Setup Docker CLI and Git') {
       steps {
         sh '''
-          apt-get update && apt-get install -y docker.io
+          apt-get update && apt-get install -y docker.io git
+          git --version
+          docker --version
         '''
       }
     }
@@ -18,13 +20,26 @@ pipeline {
     stage('Checkout') {
       steps {
         checkout scm
-        sh 'echo "Checked out branch: $(git branch --show-current)"'
+        sh '''
+          echo "=== DEBUG: Checkout Info ==="
+          echo "WORKSPACE: ${WORKSPACE}"
+          pwd
+          ls -la
+          echo "Current branch:"
+          git branch --show-current || echo "Could not get branch"
+          echo "Git status:"
+          git status
+          echo "=== END DEBUG ==="
+        '''
       }
     }
 
     stage('Build and Test') {
       steps {
-        sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && mvn clean package'
+        sh '''
+          cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
+          mvn clean package
+        '''
       }
     }
 
@@ -69,10 +84,55 @@ pipeline {
       steps {
         withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
           sh '''
+            echo "=== DEBUG: Before Git Operations ==="
+            echo "Current directory:"
+            pwd
+            echo "WORKSPACE variable: ${WORKSPACE}"
+            echo "Listing current directory:"
+            ls -la
+            echo "=== END DEBUG ==="
+            
+            # Navigate to workspace root
+            cd ${WORKSPACE}
+            
+            echo "=== DEBUG: After cd to WORKSPACE ==="
+            pwd
+            ls -la
+            echo "Checking for .git directory:"
+            ls -la .git || echo ".git not found in current directory"
+            echo "=== END DEBUG ==="
+            
+            # Configure git safe directory
+            git config --global --add safe.directory ${WORKSPACE}
+            
+            # Configure git user
             git config user.email "aaronthastal@gmail.com"
             git config user.name "Aaron White"
+            
+            echo "=== DEBUG: Git Config ==="
+            git config --list
+            echo "=== END DEBUG ==="
+            
+            # Check current state
+            echo "=== DEBUG: Git Status Before Changes ==="
+            git status
+            git remote -v
+            echo "=== END DEBUG ==="
+            
+            # Update deployment file
+            echo "=== Updating deployment file ==="
+            cat java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
             sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
+            echo "=== After sed ==="
+            cat java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
+            
+            # Git operations
             git add java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
+            
+            echo "=== DEBUG: Git Status After Add ==="
+            git status
+            echo "=== END DEBUG ==="
+            
             git commit -m "Update deployment image to version ${BUILD_NUMBER}"
             git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
           '''
