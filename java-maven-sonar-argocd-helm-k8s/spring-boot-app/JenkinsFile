@@ -28,16 +28,23 @@ pipeline {
       }
     }
 
-    stage('Static Code Analysis') {
-      environment {
-        SONAR_URL = "http://54.205.168.78:9000"
-      }
-      steps {
-        withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
-          sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && mvn sonar:sonar -Dsonar.token=$SONAR_AUTH_TOKEN -Dsonar.host.url=${SONAR_URL}'
-        }
-      }
+        stage('Static Code Analysis') {
+  environment {
+    SONAR_URL = "http://54.205.168.78:9000"
+  }
+  steps {
+    withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
+      sh '''
+        cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
+        mvn sonar:sonar \
+          -Dsonar.token=$SONAR_AUTH_TOKEN \
+          -Dsonar.host.url=$SONAR_URL \
+          -Dsonar.projectKey=UltimateCICD \
+          -Dsonar.projectName=UltimateCICD
+      '''
     }
+  }
+}
 
     stage('Build and Push Docker Image') {
       environment {
